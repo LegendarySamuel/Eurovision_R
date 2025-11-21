@@ -181,3 +181,5 @@ top3_table <- normalized_votes_named %>%
 top3_list <- top3_table %>%
   group_by(from_country_name) %>%
   summarise(top_3 = paste(to_country_name, collapse = ", "))
+
+report(sessionInfo())
