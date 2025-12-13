@@ -1,0 +1,190 @@
+---
+title: "ESC-Erfolg und Lebenserwartung"
+author: "Florian, Michael, Samuel"
+date: "2025-12-13"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+# Grundeinstellungen
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(summarytools)
+```
+
+# Einleitung
+
+In diesem Bericht untersuchen wir, ob es einen statistischen Zusammenhang zwischen der durchschnittlichen Lebenserwartung eines Landes und seinem Erfolg beim Eurovision Song Contest (ESC) gibt.
+
+Wir erwarten, dass Teilnehmer aus höher entwickelten Ländern eine bessere Chance auf einen Sieg im ESC haben. Dies begründen wir auf besser ausgebildete Infrastrukturen und Bildungsmöglichkeiten. Wir untersuchen, ob die Lebenserwartung als ein Indikator für das Entwicklungslevel eines Landes auch mit den Erfolgschancen im ESC korreliert.
+
+# Daten
+## Daten Laden
+Zunächst werden die Daten eingelesen und vorbereitet.
+
+```{r daten-laden-und-verarbeiten}
+
+eurovision <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2022/2022-05-17/eurovision.csv')
+life_expectancy <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2023/2023-12-05/life_expectancy.csv')
+
+```
+## Daten Übersicht
+Der Eurovision Datensatz enthält Informationen zu den Halbfinalisten und Finalisten verschiedener ESC-Events, sowie zu den Veranstaltungen selbst, zwischen 1956 und 2022. Dazu gehören, Platzierungen, Punkte, Nationalität, Namen und weitere Daten, wie unten zu sehen ist.
+
+```{r}
+print(dfSummary(eurovision, 
+                plain.ascii  = FALSE,
+                style        = "grid",
+                graph.magnif = 0.75,
+                varnumbers = FALSE,
+                valid.col    = FALSE,
+                tmp.img.dir  = "/tmp"), 
+      method = "render")
+```
+
+Der Life_Expectancy Datensatz enthält Lebenserwartungen zwischen 1543 und 2021, wobei die Daten vor dem 20. Jahrhundert noch deutlich lückenhafter dokumentiert sind. Es sind zum einen Daten zu spezifischen Ländern enthalten, aber auch Daten zu aggregierten Gruppen, wie zum Beispiel "weniger entwickelte Regionen" ("less developed regions"). Uns interessieren nur die Daten, die mit bestimmten Ländern in Verbindung gebracht werden können.
+
+```{r}
+print(dfSummary(life_expectancy, 
+                plain.ascii  = FALSE,
+                style        = "grid",
+                graph.magnif = 0.75,
+                varnumbers = FALSE,
+                valid.col    = FALSE,
+                tmp.img.dir  = "/tmp"), 
+      method = "render")
+```
+
+Aufgrund der Datenlage, betrachten wir nur Daten aus den Jahren von 1956 bis 2021. Außerdem beschränken wir die Betrachtung auf die Finalwettbewerbe, da die Halbfinale ohnehin schwer vergleichbar sind.
+
+## Datensätze bilden
+### Durchschnittliche Platzierung und Lebenserwartung pro Land
+Der erste Datensatz enthält für jedes teilnehmende Land die durchschnittliche Platzierung, sowie die durchschnittliche Lebenserwartung.
+```{r}
+# 1. Lebenserwartung bereinigen 
+life_agg <- life_expectancy %>%
+  rename(country = Entity) %>%
+  filter(Year >= 1956 & Year <= 2021) %>% 
+  group_by(country) %>%
+  summarise(avg_life_exp = mean(LifeExpectancy, na.rm = TRUE))
+
+# 2. Eurovision bereinigen 
+euro_agg <- eurovision %>%
+  filter(str_detect(section, "grand-final")) %>% 
+  filter(year <= 2021) %>%
+  group_by(artist_country) %>% 
+  summarise(avg_rank = mean(rank, na.rm = TRUE)) %>%
+  rename(country = artist_country)
+
+# 3. Datensätze verbinden 
+plot_data <- inner_join(euro_agg, life_agg, by = "country")
+```
+
+```{r}
+print(dfSummary(plot_data[c('country', 'avg_rank', 'avg_life_exp')], 
+                plain.ascii  = FALSE,
+                style        = "grid",
+                graph.magnif = 0.75,
+                varnumbers = FALSE,
+                valid.col    = FALSE,
+                tmp.img.dir  = "/tmp"), 
+      method = "render")
+```
+
+### Daten mit Lebenserwartungsgruppen
+```{r}
+# 1. Lebenserwartung eines Landes von 1956 bis 2021 mit Lebenserwartungslabel 
+life_groups <- life_expectancy %>%
+  rename(country = Entity) %>%
+  rename(year = Year) %>%
+  filter(year >= 1956 & year <= 2021) %>% 
+  filter(!is.na(Code)) %>%
+  mutate(
+    le_group = case_when(
+      LifeExpectancy < 30                            ~ "<30",
+      LifeExpectancy >= 30 & LifeExpectancy < 40     ~ "30–40",
+      LifeExpectancy >= 40 & LifeExpectancy < 50     ~ "40–50",
+      LifeExpectancy >= 50 & LifeExpectancy < 60     ~ "50–60",
+      LifeExpectancy >= 60 & LifeExpectancy < 70     ~ "60–70",
+      LifeExpectancy >= 70 & LifeExpectancy < 80     ~ "70–80",
+      LifeExpectancy >= 80                           ~ "80+",
+      TRUE                                           ~ NA_character_
+    )
+  )
+```
+Wir filtern zuerst alle Zeilen raus, die nicht zu einem bestimmten Land gehören und außerhalb unseres betrachteten Zeitraums liegen. Dann fügen wir zu jeder Zeile eine Information hinzu, in welches Lebenserwartungsintervall sie gehört.
+
+```{r}
+# 2. Eurovision Finale 
+euro_finals <- eurovision[, c("artist_country", "year", "section", "rank")] %>%
+  filter(section %in% c("grand-final", "final")) %>% 
+  filter(year <= 2021) %>%
+  rename(country = artist_country)
+```
+Wir beschränken den Eurovision Datensatz auf die Finale und auf die Jahre bis 2021, da wir ab 2022 keine Daten mehr haben. Die Einträge mit section = "final" kommen aus früheren Jahren, in denen es noch keine zwei separate Halbfinale gab, während die "grand-final" Teilnahme in den späteren Jahren die Qualifikation durch eine der Halbfinale voraussetzt.
+
+```{r}
+# 3. Datensätze verbinden 
+groups_finals <- inner_join(euro_finals, life_groups, by = c("year", "country"))
+```
+Die Datensätze werden verbunden, indem Zeilen mit übereinstimmendem Jahr und Land zusammengesetzt werden.
+
+```{r}
+print(dfSummary(groups_finals, 
+                plain.ascii  = FALSE,
+                style        = "grid",
+                graph.magnif = 0.75,
+                varnumbers = FALSE,
+                valid.col    = FALSE,
+                tmp.img.dir  = "/tmp"), 
+      method = "render")
+```
+# Analyse
+
+## Durchschnittliche Lebenserwartung pro Jahr über alle Länder
+
+## 
+
+## Durchschnittliche Platzierung vs. Durchschnittliche Lebenserwartung (1956-2021)
+Die folgende Grafik zeigt den Zusammenhang. Jeder Punkt repräsentiert ein Land.
+
+```{r grafik, fig.width=10, fig.height=6}
+ggplot(plot_data, aes(x = avg_life_exp, y = avg_rank)) +
+  geom_point(color = "steelblue", size = 3, alpha = 0.7) + 
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  
+  geom_text(aes(label = country), vjust = 1.5, size = 3, check_overlap = TRUE) +
+  labs(
+    title = "Zusammenhang: Lebenserwartung und ESC-Erfolg",
+    subtitle = "Durchschnittliche Platzierung vs. Durchschnittliche Lebenserwartung (1956-2021)",
+    x = "Durchschnittliche Lebenserwartung (Jahre)",
+    y = "Durchschnittliche Platzierung"
+  ) +
+  theme_minimal()
+```
+
+# Statistische Auswertung
+
+Wir prüfen die Hypothese mittels einer Pearson-Korrelation.
+
+```{r statistik}
+test_ergebnis <- cor.test(plot_data$avg_life_exp, plot_data$avg_rank)
+modell <- lm(avg_rank ~ avg_life_exp, data = plot_data)
+steigung <- coef(modell)["avg_life_exp"]
+
+print(test_ergebnis)
+```
+
+### Interpretation
+
+Die Analyse liefert folgende Werte:
+
+* **Korrelation (r):** `r round(test_ergebnis$estimate, 3)`
+* **p-Wert:** `r format.pval(test_ergebnis$p.value, eps = 0.001)`
+
+**Fazit:**
+Da der p-Wert kleiner als 0.05 ist, ist der Zusammenhang statistisch signifikant. Das Modell deutet darauf hin, dass pro Jahr zusätzlicher Lebenserwartung die Platzierung im Schnitt um etwa `r round(steigung, 2)` Plätze sinkt.
