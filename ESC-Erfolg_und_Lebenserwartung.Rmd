@@ -417,13 +417,7 @@ ggplot(data = low_high_winners_weighted_participants, aes(x = winner, y = score_
   scale_fill_manual(values = c("higher" = "#1F78B4", "lower" = "#E31A1C"))
 ```
 
-
-
-
-
-
-
-----------------------------
+Wie wir sehen, liegen die Gruppen unter der beschränkten Betrachtung näher beieinander. Dennoch scheinen die Länder mit höherer Lebenserwartung besser abzuschneiden.
 
 ## Durchschnittliche Platzierung vs. Durchschnittliche Lebenserwartung (1956-2021)
 Die folgende Grafik zeigt den Zusammenhang. Jeder Punkt repräsentiert ein Land.
